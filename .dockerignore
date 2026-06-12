@@ -1,0 +1,10 @@
+node_modules
+dist
+api/data
+api/uploads
+.git
+.trae
+*.md
+.env
+.vscode
+.idea
