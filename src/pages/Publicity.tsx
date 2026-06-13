@@ -27,18 +27,6 @@ export default function Publicity() {
         map[r.batch_id].push(r);
       }
 
-      const doneBatches = batchData.filter(
-        (b) => b.status === 'lottery_done' || b.status === 'published'
-      );
-      for (const b of doneBatches) {
-        if (!map[b.id]) {
-          try {
-            const results = await api.get<LotteryResult[]>(`/lottery/results/${b.id}`);
-            map[b.id] = results;
-          } catch {}
-        }
-      }
-
       setResultsMap(map);
       const initialExpanded = new Set(
         batchData.filter((b) => b.status === 'published').map((b) => b.id)
@@ -58,7 +46,7 @@ export default function Publicity() {
   };
 
   const displayBatches = batches.filter(
-    (b) => b.status === 'lottery_done' || b.status === 'published'
+    (b) => b.status === 'published'
   );
 
   const getStatusBadge = (status: string) => {

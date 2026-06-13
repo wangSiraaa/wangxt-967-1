@@ -66,9 +66,33 @@ echo "=== 10. Execute Lottery ==="
 RESULT=$(curl -s "$BASE/lottery/execute/$BATCH_ID" -X POST -H "Authorization: Bearer $TOKEN")
 check "Lottery executed" "1" "$(echo "$RESULT" | python3 -c "import sys,json; print(str(len(json.load(sys.stdin)['data'])))")"
 
+echo "=== 10a. [REGRESSION] Anonymous query lottery_done batch by ID (should 403) ==="
+RESULT=$(curl -s "$BASE/lottery/results/$BATCH_ID")
+check "Anonymous cannot see lottery_done batch results" "该批次抽签结果尚未发布" "$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('error',''))")"
+
+echo "=== 10b. [REGRESSION] Anonymous query /results list (should be empty before publish) ==="
+RESULT=$(curl -s "$BASE/lottery/results")
+check "Results list empty before publish" "0" "$(echo "$RESULT" | python3 -c "import sys,json; print(str(len(json.load(sys.stdin)['data'])))")"
+
+echo "=== 10c. [REGRESSION] Admin CAN query lottery_done batch by ID ==="
+RESULT=$(curl -s "$BASE/lottery/results/$BATCH_ID" -H "Authorization: Bearer $TOKEN")
+check "Admin can see lottery_done batch results" "1" "$(echo "$RESULT" | python3 -c "import sys,json; print(str(len(json.load(sys.stdin)['data'])))")"
+
 echo "=== 11. Publish Results ==="
 RESULT=$(curl -s "$BASE/lottery/publish/$BATCH_ID" -X POST -H "Authorization: Bearer $TOKEN")
 check "Publish results" "true" "$(echo "$RESULT" | python3 -c "import sys,json; print(str(json.load(sys.stdin)['success']).lower())")"
+
+echo "=== 11a. [REGRESSION] Anonymous query published batch by ID (should succeed) ==="
+RESULT=$(curl -s "$BASE/lottery/results/$BATCH_ID")
+check "Anonymous CAN see published batch results" "1" "$(echo "$RESULT" | python3 -c "import sys,json; print(str(len(json.load(sys.stdin)['data'])))")"
+
+echo "=== 11b. [REGRESSION] Anonymous query /results list (should have 1 entry now) ==="
+RESULT=$(curl -s "$BASE/lottery/results")
+check "Results list has 1 entry after publish" "1" "$(echo "$RESULT" | python3 -c "import sys,json; print(str(len(json.load(sys.stdin)['data'])))")"
+
+echo "=== 11c. [REGRESSION] Published result has is_published=1 ==="
+RESULT=$(curl -s "$BASE/lottery/results/$BATCH_ID")
+check "Published result is_published=1" "1" "$(echo "$RESULT" | python3 -c "import sys,json; print(str(json.load(sys.stdin)['data'][0].get('is_published',0)))")"
 
 echo "=== 12. Modify After Publish (should fail) ==="
 RESULT=$(curl -s "$BASE/lottery/execute/$BATCH_ID" -X POST -H "Authorization: Bearer $TOKEN")

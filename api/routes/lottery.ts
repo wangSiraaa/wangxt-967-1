@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
+import jwt from 'jsonwebtoken';
 import { run, query, queryOne } from '../database.js';
-import { authMiddleware, adminMiddleware } from '../middleware/auth.js';
+import { authMiddleware, adminMiddleware, JWT_SECRET } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -87,11 +88,35 @@ router.get('/results/:batchId', async (req: Request, res: Response): Promise<voi
   try {
     const { batchId } = req.params;
 
+    const batch = queryOne('SELECT * FROM batches WHERE id = ?', [batchId]);
+    if (!batch) {
+      res.status(404).json({ success: false, error: '批次不存在' });
+      return;
+    }
+
+    const authHeader = req.headers.authorization;
+    let isAdmin = false;
+    if (authHeader?.startsWith('Bearer ')) {
+      try {
+        const decoded = jwt.verify(authHeader.slice(7), JWT_SECRET) as { role: string };
+        isAdmin = decoded.role === 'admin';
+      } catch {
+        isAdmin = false;
+      }
+    }
+
+    if (batch.status !== 'published' && !isAdmin) {
+      res.status(403).json({ success: false, error: '该批次抽签结果尚未发布' });
+      return;
+    }
+
+    const publishedFilter = batch.status === 'published' && !isAdmin ? 'AND lr.is_published = 1' : '';
+
     const results = query(
       `SELECT lr.*, r.merchant_name, r.contact_person, r.phone, r.category, r.license_no
        FROM lottery_results lr
        LEFT JOIN registrations r ON lr.registration_id = r.id
-       WHERE lr.batch_id = ?
+       WHERE lr.batch_id = ? ${publishedFilter}
        ORDER BY lr.stall_number`,
       [batchId]
     );
