@@ -9,6 +9,7 @@ import Register from '@/pages/Register';
 import Review from '@/pages/Review';
 import Lottery from '@/pages/Lottery';
 import Publicity from '@/pages/Publicity';
+import AppealManage from '@/pages/AppealManage';
 
 function ProtectedRoute({ children, adminOnly = false }: { children: React.ReactNode; adminOnly?: boolean }) {
   const { user, token, loading } = useAuthStore();
@@ -71,6 +72,14 @@ export default function App() {
             }
           />
           <Route path="/publicity" element={<Publicity />} />
+          <Route
+            path="/appeals"
+            element={
+              <ProtectedRoute adminOnly>
+                <AppealManage />
+              </ProtectedRoute>
+            }
+          />
         </Route>
       </Routes>
     </Router>

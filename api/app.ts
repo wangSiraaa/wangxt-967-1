@@ -15,6 +15,7 @@ import batchRoutes from './routes/batches.js';
 import registrationRoutes from './routes/registrations.js';
 import lotteryRoutes from './routes/lottery.js';
 import uploadRoutes from './routes/upload.js';
+import appealRoutes from './routes/appeals.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -39,6 +40,7 @@ app.use('/api/batches', batchRoutes);
 app.use('/api/registrations', registrationRoutes);
 app.use('/api/lottery', lotteryRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/appeals', appealRoutes);
 
 app.use(
   '/api/health',

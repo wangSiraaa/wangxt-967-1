@@ -27,6 +27,10 @@ export default function Register() {
     food_license_no: '',
     food_license_expiry: '',
     food_license_image: '',
+    priority_type: 'none' as 'none' | 'disabled' | 'veteran' | 'old_merchant',
+    priority_materials: '',
+    need_adjacent: false,
+    adjacent_count: 2,
   });
 
   const [licensePreview, setLicensePreview] = useState('');
@@ -106,6 +110,8 @@ export default function Register() {
         batch_id: '', merchant_name: '', contact_person: '', phone: '',
         category: '', license_no: '', license_expiry: '', license_image: '',
         food_license_no: '', food_license_expiry: '', food_license_image: '',
+        priority_type: 'none', priority_materials: '',
+        need_adjacent: false, adjacent_count: 2,
       });
       setLicensePreview('');
       setFoodLicensePreview('');
@@ -316,6 +322,74 @@ export default function Register() {
                     <Upload className="w-6 h-6 mb-1" />
                     <span className="text-xs">上传图片</span>
                   </button>
+                )}
+              </div>
+            </div>
+
+            <div className="border-t border-sand/50 pt-4 mt-4">
+              <h3 className="font-medium text-gray-900 mb-3">优先资格（选填）</h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">资格类型</label>
+                  <select
+                    value={form.priority_type}
+                    onChange={(e) => updateField('priority_type', e.target.value)}
+                    className="w-full px-4 py-2.5 border border-sand rounded-lg focus:ring-2 focus:ring-pine/20 focus:border-pine outline-none transition-colors bg-white"
+                  >
+                    <option value="none">无优先资格</option>
+                    <option value="disabled">残障优先</option>
+                    <option value="veteran">退役军人优先</option>
+                    <option value="old_merchant">老商户优先</option>
+                  </select>
+                </div>
+                {form.priority_type !== 'none' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      优先资格说明材料 <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      value={form.priority_materials}
+                      onChange={(e) => updateField('priority_materials', e.target.value)}
+                      rows={3}
+                      className="w-full px-4 py-2.5 border border-sand rounded-lg focus:ring-2 focus:ring-pine/20 focus:border-pine outline-none transition-colors bg-white resize-none"
+                      placeholder="请提供相关证明材料的说明，如残疾证编号、退伍证编号、经营年限证明等"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      提交后管理员将复核您的优先资格材料
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="border-t border-sand/50 pt-4 mt-4">
+              <h3 className="font-medium text-gray-900 mb-3">连摊需求（选填）</h3>
+              <div className="space-y-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.need_adjacent}
+                    onChange={(e) => updateField('need_adjacent', e.target.checked as any)}
+                    className="w-4 h-4 text-pine border-sand rounded focus:ring-pine"
+                  />
+                  <span className="text-sm text-gray-700">需要相邻摊位</span>
+                </label>
+                {form.need_adjacent && (
+                  <div className="pl-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">需要的连摊数量</label>
+                    <select
+                      value={form.adjacent_count}
+                      onChange={(e) => updateField('adjacent_count', parseInt(e.target.value) as any)}
+                      className="w-full px-4 py-2.5 border border-sand rounded-lg focus:ring-2 focus:ring-pine/20 focus:border-pine outline-none transition-colors bg-white"
+                    >
+                      <option value={2}>2个连摊</option>
+                      <option value={3}>3个连摊</option>
+                      <option value={4}>4个连摊</option>
+                    </select>
+                    <p className="mt-1 text-xs text-gray-500">
+                      如相邻摊位不足，系统将自动降级为单摊参与抽签
+                    </p>
+                  </div>
                 )}
               </div>
             </div>

@@ -14,6 +14,9 @@ export default function Review() {
   const [detailReg, setDetailReg] = useState<Registration | null>(null);
   const [rejectId, setRejectId] = useState<number | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [reviewOpinion, setReviewOpinion] = useState('');
+  const [approveId, setApproveId] = useState<number | null>(null);
+  const [priorityReviewStatus, setPriorityReviewStatus] = useState<'pending' | 'approved' | 'rejected'>('approved');
 
   useEffect(() => {
     api.get<Batch[]>('/batches').then(setBatches).catch(() => {}).finally(() => setLoading(false));
@@ -32,12 +35,32 @@ export default function Review() {
     } catch {}
   };
 
-  const handleApprove = async (id: number) => {
+  const openApprove = (id: number) => {
+    setApproveId(id);
+    setReviewOpinion('');
+    setPriorityReviewStatus('approved');
+  };
+
+  const doApprove = async () => {
+    if (!approveId) return;
+    const id = approveId;
     setActionLoading(id);
     setMessage(null);
     try {
-      await api.put(`/registrations/${id}/status`, { status: 'approved' });
+      const reg = registrations.find(r => r.id === id);
+      if (reg && reg.priority_type && reg.priority_type !== 'none') {
+        await api.put(`/registrations/${id}/priority-review`, {
+          priority_review_status: priorityReviewStatus,
+          priority_review_opinion: priorityReviewStatus === 'rejected' ? reviewOpinion : null,
+        });
+      }
+      await api.put(`/registrations/${id}/status`, {
+        status: 'approved',
+        review_opinion: reviewOpinion || null,
+      });
       setMessage({ type: 'success', text: '审核通过' });
+      setApproveId(null);
+      setDetailReg(null);
       loadRegistrations();
     } catch (err: any) {
       setMessage({ type: 'error', text: err.message || '操作失败' });
@@ -46,7 +69,13 @@ export default function Review() {
     }
   };
 
-  const handleReject = async () => {
+  const openReject = (id: number) => {
+    setRejectId(id);
+    setRejectReason('');
+    setReviewOpinion('');
+  };
+
+  const doReject = async () => {
     if (!rejectId || !rejectReason.trim()) return;
     setActionLoading(rejectId);
     setMessage(null);
@@ -54,10 +83,12 @@ export default function Review() {
       await api.put(`/registrations/${rejectId}/status`, {
         status: 'rejected',
         reject_reason: rejectReason,
+        review_opinion: reviewOpinion || null,
       });
       setMessage({ type: 'success', text: '已驳回' });
       setRejectId(null);
       setRejectReason('');
+      setReviewOpinion('');
       loadRegistrations();
     } catch (err: any) {
       setMessage({ type: 'error', text: err.message || '操作失败' });
@@ -182,7 +213,7 @@ export default function Review() {
                             </button>
                             {reg.status === 'pending' && (
                               <>
-                                <button onClick={() => handleApprove(reg.id)} disabled={actionLoading === reg.id}
+                                <button onClick={() => openApprove(reg.id)} disabled={actionLoading === reg.id}
                                   className="p-1.5 text-green-500 hover:text-green-600 rounded-lg hover:bg-green-50 transition-colors disabled:opacity-50"
                                   title="通过">
                                   <CheckCircle className="w-4 h-4" />
@@ -242,19 +273,56 @@ export default function Review() {
                   <img src={detailReg.food_license_image} alt="食品许可证" className="max-w-xs rounded-lg border border-sand" />
                 </div>
               )}
+              {detailReg.priority_type && detailReg.priority_type !== 'none' && (
+                <div className="bg-amber/10 border border-amber/30 rounded-lg p-3">
+                  <div className="font-medium text-amber-dark mb-1">优先资格申请</div>
+                  <div className="text-sm text-gray-700 space-y-1">
+                    <div>资格类型：{
+                      detailReg.priority_type === 'disabled' ? '残障优先' :
+                      detailReg.priority_type === 'veteran' ? '退役军人优先' :
+                      detailReg.priority_type === 'old_merchant' ? '老商户优先' : '无'
+                    }</div>
+                    <div>材料说明：{detailReg.priority_materials || '未填写'}</div>
+                    {detailReg.priority_review_status && detailReg.priority_review_status !== 'pending' && (
+                      <div>
+                        审核状态：
+                        <span className={detailReg.priority_review_status === 'approved' ? 'text-green-600' : 'text-red-600'}>
+                          {detailReg.priority_review_status === 'approved' ? '已通过' : '已驳回'}
+                        </span>
+                      </div>
+                    )}
+                    {detailReg.priority_review_opinion && (
+                      <div>审核意见：{detailReg.priority_review_opinion}</div>
+                    )}
+                  </div>
+                </div>
+              )}
+              {detailReg.need_adjacent === 1 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="font-medium text-blue-700 mb-1">连摊需求</div>
+                  <div className="text-sm text-gray-700">
+                    需要 {detailReg.adjacent_count || 2} 个相邻摊位
+                  </div>
+                </div>
+              )}
               {detailReg.reject_reason && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                   <span className="text-red-700">驳回原因：{detailReg.reject_reason}</span>
                 </div>
               )}
+              {detailReg.review_opinion && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                  <span className="text-gray-700 text-sm">审核意见：{detailReg.review_opinion}</span>
+                </div>
+              )}
             </div>
             {detailReg.status === 'pending' && (
               <div className="flex gap-3 mt-6 pt-4 border-t border-sand">
-                <button onClick={() => { handleApprove(detailReg.id); setDetailReg(null); }}
+                <button onClick={() => { openApprove(detailReg.id); }}
                   className="flex-1 flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white py-2.5 rounded-lg font-medium transition-colors">
                   <CheckCircle className="w-4 h-4" /> 通过
                 </button>
-                <button onClick={() => { setRejectId(detailReg.id); setRejectReason(''); setDetailReg(null); }}
+                <button onClick={() => { openReject(detailReg.id); setDetailReg(null); }}
                   className="flex-1 flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white py-2.5 rounded-lg font-medium transition-colors">
                   <XCircle className="w-4 h-4" /> 驳回
                 </button>
@@ -264,25 +332,97 @@ export default function Review() {
         </div>
       )}
 
+      {approveId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setApproveId(null)}>
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-serif text-lg font-bold text-pine mb-4">审核通过确认</h3>
+
+            {(() => {
+              const reg = registrations.find(r => r.id === approveId);
+              if (reg && reg.priority_type && reg.priority_type !== 'none') {
+                return (
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">优先资格审核</label>
+                    <select
+                      value={priorityReviewStatus}
+                      onChange={(e) => setPriorityReviewStatus(e.target.value as any)}
+                      className="w-full px-4 py-2.5 border border-sand rounded-lg focus:ring-2 focus:ring-pine/20 focus:border-pine outline-none bg-white"
+                    >
+                      <option value="approved">通过优先资格</option>
+                      <option value="rejected">驳回优先资格</option>
+                    </select>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">审核意见（选填）</label>
+              <textarea
+                value={reviewOpinion}
+                onChange={(e) => setReviewOpinion(e.target.value)}
+                rows={3}
+                className="w-full px-4 py-2.5 border border-sand rounded-lg focus:ring-2 focus:ring-pine/20 focus:border-pine outline-none bg-white resize-none"
+                placeholder="请输入审核意见..."
+              />
+            </div>
+
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => setApproveId(null)}
+                className="flex-1 py-2.5 rounded-lg border border-sand text-gray-600 hover:bg-sand/50 transition-colors">
+                取消
+              </button>
+              <button
+                onClick={doApprove}
+                disabled={actionLoading === approveId}
+                className="flex-1 py-2.5 rounded-lg bg-green-500 hover:bg-green-600 text-white font-medium transition-colors disabled:opacity-50">
+                {actionLoading === approveId ? '处理中...' : '确认通过'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {rejectId && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setRejectId(null)}>
           <div className="bg-white rounded-2xl p-6 max-w-md w-full" onClick={(e) => e.stopPropagation()}>
             <h3 className="font-serif text-lg font-bold text-pine mb-4">驳回原因</h3>
-            <textarea
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              rows={4}
-              className="w-full px-4 py-2.5 border border-sand rounded-lg focus:ring-2 focus:ring-pine/20 focus:border-pine outline-none bg-white resize-none"
-              placeholder="请输入驳回原因..."
-            />
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                驳回原因 <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                rows={3}
+                className="w-full px-4 py-2.5 border border-sand rounded-lg focus:ring-2 focus:ring-pine/20 focus:border-pine outline-none bg-white resize-none"
+                placeholder="请输入驳回原因..."
+              />
+            </div>
+
+            <div className="mb-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">审核意见（选填）</label>
+              <textarea
+                value={reviewOpinion}
+                onChange={(e) => setReviewOpinion(e.target.value)}
+                rows={2}
+                className="w-full px-4 py-2.5 border border-sand rounded-lg focus:ring-2 focus:ring-pine/20 focus:border-pine outline-none bg-white resize-none"
+                placeholder="请输入审核意见..."
+              />
+            </div>
+
             <div className="flex gap-3 mt-4">
               <button onClick={() => setRejectId(null)}
                 className="flex-1 py-2.5 rounded-lg border border-sand text-gray-600 hover:bg-sand/50 transition-colors">
                 取消
               </button>
-              <button onClick={handleReject} disabled={!rejectReason.trim() || actionLoading === rejectId}
+              <button
+                onClick={doReject}
+                disabled={!rejectReason.trim() || actionLoading === rejectId}
                 className="flex-1 py-2.5 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium transition-colors disabled:opacity-50">
-                确认驳回
+                {actionLoading === rejectId ? '处理中...' : '确认驳回'}
               </button>
             </div>
           </div>

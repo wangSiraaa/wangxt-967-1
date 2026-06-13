@@ -10,11 +10,16 @@ export interface User {
 export interface Batch {
   id: number;
   name: string;
-  status: 'open' | 'closed' | 'lottery_done' | 'published';
+  status: 'open' | 'closed' | 'lottery_done' | 'published' | 'voided';
   stall_count: number;
   stall_numbers: string;
   start_date: string;
   end_date: string;
+  random_seed?: string;
+  published_at?: string;
+  appeal_deadline?: string;
+  category_concentration_limit?: number;
+  correction_note?: string;
   created_at: string;
   registration_count?: number;
 }
@@ -33,8 +38,16 @@ export interface Registration {
   food_license_no: string;
   food_license_expiry: string;
   food_license_image: string;
+  priority_type?: 'none' | 'disabled' | 'veteran' | 'old_merchant';
+  priority_materials?: string;
+  priority_review_status?: 'pending' | 'approved' | 'rejected';
+  priority_review_opinion?: string;
+  need_adjacent?: number;
+  adjacent_count?: number;
+  adjacent_approved?: number;
   status: 'pending' | 'approved' | 'rejected';
   reject_reason: string;
+  review_opinion?: string;
   created_at: string;
   reviewed_at: string;
   batch_name?: string;
@@ -46,13 +59,45 @@ export interface LotteryResult {
   registration_id: number;
   stall_number: string;
   is_published: number;
+  draw_reason?: string;
+  is_void?: number;
+  void_reason?: string;
   created_at: string;
   merchant_name?: string;
   contact_person?: string;
   phone?: string;
   category?: string;
   license_no?: string;
+  priority_type?: string;
+  need_adjacent?: number;
+  adjacent_count?: number;
+  adjacent_approved?: number;
   batch_name?: string;
+  batch_status?: string;
+}
+
+export interface Appeal {
+  id: number;
+  batch_id: number;
+  registration_id: number;
+  user_id: number;
+  content: string;
+  status: 'pending' | 'reviewed' | 'rejected';
+  created_at: string;
+  merchant_name?: string;
+  phone?: string;
+  category?: string;
+  batch_name?: string;
+}
+
+export interface AppealReview {
+  id: number;
+  appeal_id: number;
+  reviewer_id?: number;
+  review_result: 'correction' | 'void_batch' | 'rejected';
+  correction_note?: string;
+  created_at: string;
+  reviewer_name?: string;
 }
 
 export interface ApiResponse<T> {

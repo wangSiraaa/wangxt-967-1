@@ -61,11 +61,18 @@ router.post('/', authMiddleware, async (req: Request, res: Response): Promise<vo
       batch_id, merchant_name, contact_person, phone, category,
       license_no, license_expiry, license_image,
       food_license_no, food_license_expiry, food_license_image,
+      priority_type, priority_materials,
+      need_adjacent, adjacent_count,
     } = req.body;
 
     if (!batch_id || !merchant_name || !contact_person || !phone || !category ||
         !license_no || !license_expiry || !license_image) {
       res.status(400).json({ success: false, error: '请填写所有必填字段' });
+      return;
+    }
+
+    if (priority_type && !['none', 'disabled', 'veteran', 'old_merchant'].includes(priority_type)) {
+      res.status(400).json({ success: false, error: '优先资格类型无效' });
       return;
     }
 
@@ -100,16 +107,24 @@ router.post('/', authMiddleware, async (req: Request, res: Response): Promise<vo
       return;
     }
 
+    const finalPriorityType = priority_type || 'none';
+    const finalNeedAdjacent = need_adjacent ? 1 : 0;
+    const finalAdjacentCount = finalNeedAdjacent ? (adjacent_count || 2) : 0;
+
     run(
       `INSERT INTO registrations
         (batch_id, user_id, merchant_name, contact_person, phone, category,
          license_no, license_expiry, license_image,
-         food_license_no, food_license_expiry, food_license_image, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+         food_license_no, food_license_expiry, food_license_image,
+         priority_type, priority_materials,
+         need_adjacent, adjacent_count, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
       [
         batch_id, req.user!.id, merchant_name, contact_person, phone, category,
         license_no, license_expiry, license_image,
         food_license_no ?? null, food_license_expiry ?? null, food_license_image ?? null,
+        finalPriorityType, priority_materials ?? null,
+        finalNeedAdjacent, finalAdjacentCount,
       ]
     );
 
@@ -139,7 +154,7 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
 
 router.put('/:id/status', authMiddleware, adminMiddleware, async (req: Request, res: Response): Promise<void> => {
   try {
-    const { status, reject_reason } = req.body;
+    const { status, reject_reason, review_opinion } = req.body;
 
     if (!status || !['approved', 'rejected'].includes(status)) {
       res.status(400).json({ success: false, error: '状态必须是 approved 或 rejected' });
@@ -155,13 +170,41 @@ router.put('/:id/status', authMiddleware, adminMiddleware, async (req: Request, 
     const now = new Date().toISOString().replace('T', ' ').split('.')[0];
 
     run(
-      'UPDATE registrations SET status = ?, reject_reason = ?, reviewed_at = ? WHERE id = ?',
+      'UPDATE registrations SET status = ?, reject_reason = ?, review_opinion = ?, reviewed_at = ? WHERE id = ?',
       [
         status,
         status === 'rejected' ? (reject_reason ?? null) : null,
+        review_opinion ?? null,
         now,
         req.params.id,
       ]
+    );
+
+    const registration = queryOne('SELECT * FROM registrations WHERE id = ?', [req.params.id]);
+    res.json({ success: true, data: registration });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.put('/:id/priority-review', authMiddleware, adminMiddleware, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { priority_review_status, priority_review_opinion } = req.body;
+
+    if (!priority_review_status || !['pending', 'approved', 'rejected'].includes(priority_review_status)) {
+      res.status(400).json({ success: false, error: '优先资格审核状态无效' });
+      return;
+    }
+
+    const existing = queryOne('SELECT * FROM registrations WHERE id = ?', [req.params.id]);
+    if (!existing) {
+      res.status(404).json({ success: false, error: '报名记录不存在' });
+      return;
+    }
+
+    run(
+      'UPDATE registrations SET priority_review_status = ?, priority_review_opinion = ? WHERE id = ?',
+      [priority_review_status, priority_review_opinion ?? null, req.params.id]
     );
 
     const registration = queryOne('SELECT * FROM registrations WHERE id = ?', [req.params.id]);

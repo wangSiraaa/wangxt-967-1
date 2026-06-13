@@ -26,11 +26,16 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS batches (
   id INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'closed', 'lottery_done', 'published')),
+  status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'closed', 'lottery_done', 'published', 'voided')),
   stall_count INTEGER NOT NULL,
   stall_numbers TEXT NOT NULL,
   start_date TEXT NOT NULL,
   end_date TEXT NOT NULL,
+  random_seed TEXT,
+  published_at TEXT,
+  appeal_deadline TEXT,
+  category_concentration_limit REAL DEFAULT 0.3,
+  correction_note TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -48,8 +53,16 @@ CREATE TABLE IF NOT EXISTS registrations (
   food_license_no TEXT,
   food_license_expiry TEXT,
   food_license_image TEXT,
+  priority_type TEXT CHECK(priority_type IN ('none', 'disabled', 'veteran', 'old_merchant')),
+  priority_materials TEXT,
+  priority_review_status TEXT DEFAULT 'pending' CHECK(priority_review_status IN ('pending', 'approved', 'rejected')),
+  priority_review_opinion TEXT,
+  need_adjacent INTEGER DEFAULT 0,
+  adjacent_count INTEGER DEFAULT 2,
+  adjacent_approved INTEGER DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected')),
   reject_reason TEXT,
+  review_opinion TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   reviewed_at TEXT,
   FOREIGN KEY (batch_id) REFERENCES batches(id),
@@ -62,9 +75,38 @@ CREATE TABLE IF NOT EXISTS lottery_results (
   registration_id INTEGER NOT NULL,
   stall_number TEXT NOT NULL,
   is_published INTEGER NOT NULL DEFAULT 0,
+  draw_reason TEXT,
+  is_void INTEGER DEFAULT 0,
+  void_reason TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (batch_id) REFERENCES batches(id),
   FOREIGN KEY (registration_id) REFERENCES registrations(id)
+);
+
+CREATE TABLE IF NOT EXISTS appeals (
+  id INTEGER PRIMARY KEY,
+  batch_id INTEGER NOT NULL,
+  registration_id INTEGER,
+  user_id INTEGER,
+  merchant_name TEXT,
+  phone TEXT,
+  content TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'reviewed', 'rejected')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (batch_id) REFERENCES batches(id),
+  FOREIGN KEY (registration_id) REFERENCES registrations(id),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS appeal_reviews (
+  id INTEGER PRIMARY KEY,
+  appeal_id INTEGER NOT NULL,
+  reviewer_id INTEGER,
+  review_result TEXT NOT NULL CHECK(review_result IN ('correction', 'void_batch', 'rejected')),
+  correction_note TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (appeal_id) REFERENCES appeals(id),
+  FOREIGN KEY (reviewer_id) REFERENCES users(id)
 );
 `;
 

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store/auth';
-import { Menu, X, LogOut, User, Home, ClipboardList, FileCheck, Shuffle, Megaphone } from 'lucide-react';
+import { Menu, X, LogOut, User, Home, ClipboardList, FileCheck, Shuffle, Megaphone, MessageSquare } from 'lucide-react';
 
 export default function Layout() {
   const { user, logout, isAdmin } = useAuthStore();
@@ -21,6 +21,7 @@ export default function Layout() {
     ...(user?.role === 'admin' ? [
       { path: '/review', label: '审核', icon: FileCheck },
       { path: '/lottery', label: '抽签', icon: Shuffle },
+      { path: '/appeals', label: '申诉', icon: MessageSquare },
     ] : []),
   ];
 
