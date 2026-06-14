@@ -132,6 +132,52 @@ async function seedAdmin() {
   }
 }
 
+function getColumns(tableName: string): Set<string> {
+  const d = getDatabase();
+  const result = d.exec(`PRAGMA table_info(${tableName})`);
+  const cols = new Set<string>();
+  if (result.length > 0) {
+    result[0].values.forEach(row => {
+      cols.add(row[1] as string);
+    });
+  }
+  return cols;
+}
+
+function addColumnIfMissing(table: string, colDef: string) {
+  const colName = colDef.split(/\s+/)[0];
+  const existing = getColumns(table);
+  if (!existing.has(colName)) {
+    run(`ALTER TABLE ${table} ADD COLUMN ${colDef}`);
+    console.log(`[Migration] Added ${table}.${colName}`);
+  }
+}
+
+function runMigrations() {
+  addColumnIfMissing('batches', 'random_seed TEXT');
+  addColumnIfMissing('batches', 'published_at TEXT');
+  addColumnIfMissing('batches', 'appeal_deadline TEXT');
+  addColumnIfMissing('batches', 'category_concentration_limit REAL DEFAULT 0.3');
+  addColumnIfMissing('batches', 'correction_note TEXT');
+
+  addColumnIfMissing('registrations', "priority_type TEXT CHECK(priority_type IN ('none', 'disabled', 'veteran', 'old_merchant'))");
+  addColumnIfMissing('registrations', 'priority_materials TEXT');
+  addColumnIfMissing('registrations', "priority_review_status TEXT DEFAULT 'pending' CHECK(priority_review_status IN ('pending', 'approved', 'rejected'))");
+  addColumnIfMissing('registrations', 'priority_review_opinion TEXT');
+  addColumnIfMissing('registrations', 'need_adjacent INTEGER DEFAULT 0');
+  addColumnIfMissing('registrations', 'adjacent_count INTEGER DEFAULT 2');
+  addColumnIfMissing('registrations', 'adjacent_approved INTEGER DEFAULT 0');
+
+  addColumnIfMissing('lottery_results', 'draw_reason TEXT');
+  addColumnIfMissing('lottery_results', 'is_void INTEGER DEFAULT 0');
+  addColumnIfMissing('lottery_results', 'void_reason TEXT');
+
+  addColumnIfMissing('appeals', 'registration_id INTEGER');
+  addColumnIfMissing('appeals', 'user_id INTEGER');
+  addColumnIfMissing('appeals', 'merchant_name TEXT');
+  addColumnIfMissing('appeals', 'phone TEXT');
+}
+
 export async function initDatabase() {
   if (db) return db;
 
@@ -145,6 +191,7 @@ export async function initDatabase() {
     const fileBuffer = fs.readFileSync(DB_PATH);
     db = new SQL.Database(fileBuffer);
     console.log('Database loaded from file');
+    runMigrations();
   } else {
     db = new SQL.Database();
     db.run(SCHEMA);

@@ -49,9 +49,9 @@ export default function Lottery() {
       ]);
       setSelectedBatch(bDetail);
       setRegistrations(rData);
-      if (batch.status === 'lottery_done' || batch.status === 'published') {
-        const lotteryData = await api.get<LotteryResult[]>(`/lottery/results/${batch.id}`);
-        setResults(lotteryData);
+      if (batch.status === 'lottery_done' || batch.status === 'published' || batch.status === 'voided') {
+        const raw = await api.get<{ batch: Batch; results: LotteryResult[]; appeals: unknown[] }>(`/lottery/results/${batch.id}`);
+        setResults(raw.results || []);
       }
     } catch {}
   };
@@ -117,8 +117,8 @@ export default function Lottery() {
       }
 
       await new Promise((resolve) => setTimeout(resolve, 600));
-      const lotteryData = await api.post<LotteryResult[]>(`/lottery/execute/${selectedBatch.id}`);
-      setResults(lotteryData);
+      const lotteryData = await api.post<{ seed: string; results: LotteryResult[]; stats: Record<string, unknown> }>(`/lottery/execute/${selectedBatch.id}`);
+      setResults(lotteryData.results || []);
       setAnimating(false);
       loadBatches();
     } catch (err: any) {
@@ -150,8 +150,14 @@ export default function Lottery() {
       closed: { label: '已截止', color: 'text-yellow-600', dot: 'bg-yellow-500' },
       lottery_done: { label: '已抽签', color: 'text-blue-600', dot: 'bg-blue-500' },
       published: { label: '已公示', color: 'text-pine', dot: 'bg-pine' },
+      voided: { label: '已作废', color: 'text-red-600', dot: 'bg-red-500' },
     };
     return map[status] || { label: status, color: 'text-gray-600', dot: 'bg-gray-500' };
+  };
+
+  const getPriorityLabel = (p?: string) => {
+    const m: Record<string, string> = { disabled: '残障优先', veteran: '退役军人优先', old_merchant: '老商户优先' };
+    return m[p || ''] || '';
   };
 
   return (
@@ -225,6 +231,17 @@ export default function Lottery() {
                       <span className="text-gray-500">已通过报名：<span className="text-green-600 font-medium">{approvedCount}</span></span>
                       <span className="text-gray-500">待审核：<span className="text-yellow-600 font-medium">{pendingCount}</span></span>
                     </div>
+                    {selectedBatch.random_seed && (
+                      <div className="mt-2 text-xs text-gray-400 font-mono">随机种子：{selectedBatch.random_seed}</div>
+                    )}
+                    {selectedBatch.published_at && (
+                      <div className="mt-1 text-xs text-gray-400">公示时间：{selectedBatch.published_at}</div>
+                    )}
+                    {selectedBatch.correction_note && (
+                      <div className="mt-3 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                        <span className="font-medium">更正/作废说明：</span>{selectedBatch.correction_note}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     {selectedBatch.status === 'open' && (
@@ -256,19 +273,43 @@ export default function Lottery() {
 
               {results.length > 0 && (
                 <div className="bg-white rounded-xl p-5 border border-sand/50 shadow-sm">
-                  <h3 className="font-medium text-gray-900 mb-4">抽签结果</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {results.map((r) => (
-                      <div key={r.id} className="flex items-center gap-3 p-3 rounded-lg bg-sand/30 border border-sand">
-                        <div className="w-12 h-12 bg-pine rounded-lg flex items-center justify-center text-amber font-bold text-lg">
-                          {r.stall_number}
+                  <h3 className="font-medium text-gray-900 mb-4">抽签结果 <span className="text-xs text-gray-400 ml-2">共 {results.length} 条</span></h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {results.map((r) => {
+                      const isVoid = r.is_void === 1;
+                      const priorityLabel = getPriorityLabel(r.priority_type);
+                      const needsAdjacent = r.need_adjacent === 1;
+                      const adjApproved = r.adjacent_approved === 1;
+                      return (
+                        <div key={r.id} className={`flex gap-3 p-3 rounded-lg border ${
+                          isVoid ? 'bg-gray-50 border-gray-200 opacity-70' : 'bg-sand/30 border-sand'
+                        }`}>
+                          <div className={`w-12 h-12 rounded-lg flex items-center justify-center font-bold text-lg shrink-0 ${
+                            isVoid ? 'bg-gray-400 text-gray-100' : 'bg-pine text-amber'
+                          }`}>
+                            {r.stall_number}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-medium text-gray-900 text-sm truncate">{r.merchant_name}</p>
+                              {isVoid && <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-600 rounded">已作废</span>}
+                              {priorityLabel && <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded">{priorityLabel}</span>}
+                              {needsAdjacent && (adjApproved
+                                ? <span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded">连摊✅</span>
+                                : <span className="text-[10px] px-1.5 py-0.5 bg-orange-100 text-orange-600 rounded">连摊未满足</span>
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-500 mt-0.5 truncate">{r.category} · {r.phone}</p>
+                            {r.draw_reason && (
+                              <p className="text-[11px] text-gray-400 mt-1 leading-snug line-clamp-2">📌 {r.draw_reason}</p>
+                            )}
+                            {isVoid && r.void_reason && (
+                              <p className="text-[11px] text-red-500 mt-1 leading-snug">⚠️ {r.void_reason}</p>
+                            )}
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium text-gray-900 text-sm">{r.merchant_name}</p>
-                          <p className="text-xs text-gray-500">{r.category}</p>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}

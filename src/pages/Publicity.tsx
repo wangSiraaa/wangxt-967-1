@@ -80,8 +80,51 @@ export default function Publicity() {
       return;
     }
     try {
-      const data = await api.get<ExplanationData>(`/lottery/explanation/${batchId}`);
-      setExplanationMap((prev) => ({ ...prev, [batchId]: data }));
+      const data = await api.get<{
+        batch_info: {
+          total_stalls: number;
+          total_applicants: number;
+          category_concentration_limit: number;
+        };
+        selected: Array<{
+          registration_id: number;
+          merchant_name: string;
+          stall_number: string;
+          draw_reason?: string;
+          priority_type?: string;
+          need_adjacent?: number;
+        }>;
+        not_selected: Array<{
+          id: number;
+          merchant_name: string;
+          reason: string;
+          priority_type?: string;
+          need_adjacent?: number;
+        }>;
+      }>(`/lottery/explanation/${batchId}`);
+
+      const transformed: ExplanationData = {
+        won: data.selected.map(s => ({
+          registration_id: s.registration_id,
+          merchant_name: s.merchant_name,
+          stall_number: s.stall_number,
+          reason: s.draw_reason || '抽签分配',
+          priority_type: s.priority_type,
+          need_adjacent: s.need_adjacent,
+        })),
+        lost: data.not_selected.map(n => ({
+          registration_id: n.id,
+          merchant_name: n.merchant_name,
+          reason: n.reason,
+          priority_type: n.priority_type,
+          need_adjacent: n.need_adjacent,
+        })),
+        total_stalls: data.batch_info.total_stalls,
+        total_applicants: data.batch_info.total_applicants,
+        category_concentration_limit: data.batch_info.category_concentration_limit,
+      };
+
+      setExplanationMap((prev) => ({ ...prev, [batchId]: transformed }));
       setShowExplanation(batchId);
     } catch (err: any) {
       console.error('Failed to load explanation:', err);
@@ -316,32 +359,52 @@ export default function Publicity() {
                     {batchResults.length === 0 ? (
                       <div className="text-center py-6 text-gray-400 text-sm">暂无抽签结果</div>
                     ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {batchResults.map((r) => (
-                          <div
-                            key={r.id}
-                            className={`flex items-center gap-3 p-4 rounded-lg border transition-all ${
-                              batch.status === 'published'
-                                ? 'bg-amber/5 border-amber/30'
-                                : 'bg-sand/30 border-sand'
-                            }`}
-                          >
-                            <div className={`w-14 h-14 rounded-lg flex items-center justify-center font-bold text-lg ${
-                              batch.status === 'published'
-                                ? 'bg-pine text-amber'
-                                : 'bg-pine/80 text-white'
-                            }`}>
-                              {r.stall_number}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {batchResults.map((r) => {
+                          const isVoid = r.is_void === 1;
+                          const pLabel = getPriorityLabel(r.priority_type);
+                          const needAdj = r.need_adjacent === 1;
+                          const adjOk = r.adjacent_approved === 1;
+                          return (
+                            <div
+                              key={r.id}
+                              className={`flex gap-3 p-4 rounded-lg border transition-all ${
+                                isVoid
+                                  ? 'bg-gray-50 border-gray-200 opacity-70'
+                                  : batch.status === 'published'
+                                  ? 'bg-amber/5 border-amber/30'
+                                  : 'bg-sand/30 border-sand'
+                              }`}
+                            >
+                              <div className={`w-14 h-14 rounded-lg flex items-center justify-center font-bold text-lg shrink-0 ${
+                                isVoid ? 'bg-gray-400 text-gray-100' : 'bg-pine text-amber'
+                              }`}>
+                                {r.stall_number}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <p className="font-medium text-gray-900 truncate">{r.merchant_name}</p>
+                                  {isVoid && <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-600 rounded">作废</span>}
+                                  {pLabel !== '普通' && <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded">{pLabel}</span>}
+                                  {needAdj && (adjOk
+                                    ? <span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded">连摊</span>
+                                    : <span className="text-[10px] px-1.5 py-0.5 bg-orange-100 text-orange-600 rounded">连摊降级</span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-gray-500 mt-0.5">{r.category}</p>
+                                {r.draw_reason && (
+                                  <p className="text-[11px] text-gray-400 mt-1 leading-snug">📌 {r.draw_reason}</p>
+                                )}
+                                {isVoid && r.void_reason && (
+                                  <p className="text-[11px] text-red-500 mt-1 leading-snug">⚠️ {r.void_reason}</p>
+                                )}
+                              </div>
+                              {batch.status === 'published' && !isVoid && (
+                                <Lock className="w-4 h-4 text-pine/40 flex-shrink-0 self-center" />
+                              )}
                             </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium text-gray-900 truncate">{r.merchant_name}</p>
-                              <p className="text-xs text-gray-500">{r.category}</p>
-                            </div>
-                            {batch.status === 'published' && (
-                              <Lock className="w-4 h-4 text-pine/40 flex-shrink-0" />
-                            )}
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>

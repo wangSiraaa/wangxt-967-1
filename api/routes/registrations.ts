@@ -2,6 +2,19 @@ import { Router, type Request, type Response } from 'express';
 import { run, query, queryOne } from '../database.js';
 import { authMiddleware, adminMiddleware } from '../middleware/auth.js';
 
+function normalizeRegistration(r: Record<string, unknown>) {
+  return {
+    ...r,
+    priority_type: (r.priority_type as string) || 'none',
+    priority_materials: (r.priority_materials as string) || null,
+    priority_review_status: (r.priority_review_status as string) || 'pending',
+    priority_review_opinion: (r.priority_review_opinion as string) || null,
+    need_adjacent: Number(r.need_adjacent) || 0,
+    adjacent_count: Number(r.adjacent_count) || 2,
+    adjacent_approved: Number(r.adjacent_approved) || 0,
+  };
+}
+
 const router = Router();
 
 router.get('/', async (req: Request, res: Response): Promise<void> => {
@@ -22,7 +35,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
 
     sql += ' ORDER BY r.created_at DESC';
 
-    const registrations = query(sql, params);
+    const registrations = query(sql, params).map(normalizeRegistration);
     res.json({ success: true, data: registrations });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
@@ -146,7 +159,7 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
       res.status(404).json({ success: false, error: '报名记录不存在' });
       return;
     }
-    res.json({ success: true, data: registration });
+    res.json({ success: true, data: normalizeRegistration(registration) });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -181,7 +194,7 @@ router.put('/:id/status', authMiddleware, adminMiddleware, async (req: Request, 
     );
 
     const registration = queryOne('SELECT * FROM registrations WHERE id = ?', [req.params.id]);
-    res.json({ success: true, data: registration });
+    res.json({ success: true, data: normalizeRegistration(registration as Record<string, unknown>) });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -208,7 +221,7 @@ router.put('/:id/priority-review', authMiddleware, adminMiddleware, async (req: 
     );
 
     const registration = queryOne('SELECT * FROM registrations WHERE id = ?', [req.params.id]);
-    res.json({ success: true, data: registration });
+    res.json({ success: true, data: normalizeRegistration(registration as Record<string, unknown>) });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }

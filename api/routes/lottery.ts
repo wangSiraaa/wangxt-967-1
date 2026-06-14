@@ -151,6 +151,19 @@ function weightedShuffle<T extends { weight: number }>(arr: T[], rng: SeededRand
   return result;
 }
 
+function normalizeRegistration(r: RegistrationWithPriority | Record<string, unknown>): RegistrationWithPriority {
+  return {
+    ...r as RegistrationWithPriority,
+    priority_type: (r as RegistrationWithPriority).priority_type || 'none',
+    priority_materials: (r as RegistrationWithPriority).priority_materials || null,
+    priority_review_status: (r as RegistrationWithPriority).priority_review_status || 'pending',
+    priority_review_opinion: (r as RegistrationWithPriority).priority_review_opinion || null,
+    need_adjacent: Number((r as RegistrationWithPriority).need_adjacent) || 0,
+    adjacent_count: Number((r as RegistrationWithPriority).adjacent_count) || 2,
+    adjacent_approved: Number((r as RegistrationWithPriority).adjacent_approved) || 0,
+  };
+}
+
 router.post('/execute/:batchId', authMiddleware, adminMiddleware, async (req: Request, res: Response): Promise<void> => {
   try {
     const { batchId } = req.params;
@@ -169,7 +182,7 @@ router.post('/execute/:batchId', authMiddleware, adminMiddleware, async (req: Re
     const approved = query(
       'SELECT * FROM registrations WHERE batch_id = ? AND status = ?',
       [batchId, 'approved']
-    ) as RegistrationWithPriority[];
+    ).map(normalizeRegistration);
 
     if (approved.length === 0) {
       res.status(400).json({ success: false, error: '该批次没有已审核通过的报名' });
@@ -381,7 +394,7 @@ router.get('/results/:batchId', async (req: Request, res: Response): Promise<voi
     const publishedFilter = batch.status === 'published' && !isAdmin ? 'AND lr.is_published = 1' : '';
     const voidFilter = batch.status !== 'voided' ? 'AND lr.is_void = 0' : '';
 
-    const results = query(
+    const rawResults = query(
       `SELECT lr.*, r.merchant_name, r.contact_person, r.phone, r.category, r.license_no,
               r.priority_type, r.need_adjacent, r.adjacent_count, r.adjacent_approved
        FROM lottery_results lr
@@ -390,6 +403,18 @@ router.get('/results/:batchId', async (req: Request, res: Response): Promise<voi
        ORDER BY lr.stall_number`,
       [batchId]
     );
+
+    const results = rawResults.map(r => ({
+      ...r,
+      is_published: Number(r.is_published) || 0,
+      draw_reason: r.draw_reason || '历史抽签分配',
+      is_void: Number(r.is_void) || 0,
+      void_reason: r.void_reason || null,
+      priority_type: r.priority_type || 'none',
+      need_adjacent: Number(r.need_adjacent) || 0,
+      adjacent_count: Number(r.adjacent_count) || 2,
+      adjacent_approved: Number(r.adjacent_approved) || 0,
+    }));
 
     const appeals = query(
       `SELECT a.*, r.merchant_name
@@ -415,8 +440,9 @@ router.get('/results/:batchId', async (req: Request, res: Response): Promise<voi
 
 router.get('/results', async (req: Request, res: Response): Promise<void> => {
   try {
-    const results = query(
+    const raw = query(
       `SELECT lr.*, r.merchant_name, r.contact_person, r.phone, r.category, r.license_no,
+              r.priority_type, r.need_adjacent, r.adjacent_count, r.adjacent_approved,
               b.name as batch_name, b.status as batch_status
        FROM lottery_results lr
        LEFT JOIN registrations r ON lr.registration_id = r.id
@@ -424,6 +450,18 @@ router.get('/results', async (req: Request, res: Response): Promise<void> => {
        WHERE lr.is_published = 1 AND lr.is_void = 0 AND b.status = 'published'
        ORDER BY lr.batch_id, lr.stall_number`
     );
+
+    const results = raw.map(r => ({
+      ...r,
+      is_published: Number((r as Record<string, unknown>).is_published) || 0,
+      draw_reason: (r as Record<string, unknown>).draw_reason as string || '历史抽签分配',
+      is_void: Number((r as Record<string, unknown>).is_void) || 0,
+      void_reason: (r as Record<string, unknown>).void_reason as string || null,
+      priority_type: (r as Record<string, unknown>).priority_type as string || 'none',
+      need_adjacent: Number((r as Record<string, unknown>).need_adjacent) || 0,
+      adjacent_count: Number((r as Record<string, unknown>).adjacent_count) || 2,
+      adjacent_approved: Number((r as Record<string, unknown>).adjacent_approved) || 0,
+    }));
 
     res.json({ success: true, data: results });
   } catch (err: any) {
@@ -493,9 +531,9 @@ router.get('/explanation/:batchId', async (req: Request, res: Response): Promise
     const allRegistrations = query(
       'SELECT * FROM registrations WHERE batch_id = ? AND status = ?',
       [batchId, 'approved']
-    ) as RegistrationWithPriority[];
+    ).map(normalizeRegistration);
 
-    const results = query(
+    const rawResults = query(
       `SELECT lr.*, r.merchant_name, r.category, r.priority_type, r.need_adjacent, r.adjacent_approved
        FROM lottery_results lr
        LEFT JOIN registrations r ON lr.registration_id = r.id
@@ -504,11 +542,22 @@ router.get('/explanation/:batchId', async (req: Request, res: Response): Promise
       [batchId]
     );
 
+    const results = rawResults.map(r => ({
+      ...r,
+      registration_id: Number(r.registration_id),
+      stall_number: r.stall_number,
+      merchant_name: r.merchant_name,
+      category: r.category,
+      draw_reason: r.draw_reason || '历史抽签分配',
+      priority_type: r.priority_type || 'none',
+      need_adjacent: Number(r.need_adjacent) || 0,
+      adjacent_approved: Number(r.adjacent_approved) || 0,
+    }));
+
     const selectedIds = new Set(results.map(r => r.registration_id));
     const notSelected = allRegistrations.filter(r => !selectedIds.has(r.id));
 
     const notSelectedWithReason = notSelected.map(r => {
-      let reason = '未中签';
       const reasons: string[] = [];
 
       if (r.need_adjacent === 1 && r.adjacent_approved === 0) {
@@ -517,7 +566,7 @@ router.get('/explanation/:batchId', async (req: Request, res: Response): Promise
 
       const categoryCounts = getCategoryCounts(allRegistrations);
       const totalStalls = (batch.stall_count as number) || 0;
-      const limit = Math.max(1, Math.floor(totalStalls * ((batch.category_concentration_limit as number) || 0.3)));
+      const limit = Math.max(1, Math.floor(totalStalls * (((batch as Record<string, unknown>).category_concentration_limit as number) || 0.3)));
       if ((categoryCounts[r.category] || 0) > limit) {
         reasons.push(`同品类（${r.category}）报名人数较多，受品类集中度限制`);
       }
@@ -526,15 +575,13 @@ router.get('/explanation/:batchId', async (req: Request, res: Response): Promise
         reasons.push('随机抽签未中');
       }
 
-      reason = reasons.join('；');
-
       return {
         id: r.id,
         merchant_name: r.merchant_name,
         category: r.category,
         priority_type: r.priority_type,
         need_adjacent: r.need_adjacent,
-        reason,
+        reason: reasons.join('；'),
       };
     });
 
@@ -545,6 +592,7 @@ router.get('/explanation/:batchId', async (req: Request, res: Response): Promise
       stallNumbers = [];
     }
 
+    const normBatch = batch as Record<string, unknown>;
     res.json({
       success: true,
       data: {
@@ -556,11 +604,11 @@ router.get('/explanation/:batchId', async (req: Request, res: Response): Promise
           total_applicants: allRegistrations.length,
           selected_count: results.length,
           not_selected_count: notSelected.length,
-          random_seed: batch.random_seed,
-          published_at: batch.published_at,
-          appeal_deadline: batch.appeal_deadline,
-          category_concentration_limit: batch.category_concentration_limit,
-          correction_note: batch.correction_note,
+          random_seed: normBatch.random_seed || null,
+          published_at: normBatch.published_at || null,
+          appeal_deadline: normBatch.appeal_deadline || null,
+          category_concentration_limit: (normBatch.category_concentration_limit as number) || 0.3,
+          correction_note: normBatch.correction_note || null,
         },
         selected: results,
         not_selected: notSelectedWithReason,
